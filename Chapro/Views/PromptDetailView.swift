@@ -30,14 +30,22 @@ struct PromptDetailView: View {
             .foregroundColor(.white)
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 16) {
+                        // ① Prompt Name
                         ZStack(alignment: .topLeading) {
                             VStack(alignment: .leading){
                                 VStack(alignment: .leading){
-                                    Text(prompt.title)
-                                        .font(.title).bold()
                                     
+                                    if let title = promptDetail?["title"] as? String {
+                                        Text(title)
+                                            .font(.title).bold()
+                                    }
+                                    // ② Description
                                     ScrollView(.vertical) {
                                         VStack(alignment: .leading, spacing: 0) {
+                                            if let explanation = promptDetail?["explanation"] as? String {
+                                                Text(explanation)
+                                                    .font(.title).bold()
+                                            }
                                             Text(prompt.folder)
                                                 .padding(4)
                                             Spacer(minLength: 0)
