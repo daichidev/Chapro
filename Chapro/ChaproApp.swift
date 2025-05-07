@@ -9,12 +9,11 @@ import SwiftUI
 
 @main
 struct ChaproApp: App {
-    let persistenceController = PersistenceController.shared
-
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            MainView()
         }
+        .defaultSize(width: 1024, height: 800)
+        .windowResizability(.automatic)
     }
 }
