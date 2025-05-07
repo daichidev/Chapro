@@ -44,10 +44,9 @@ struct PromptDetailView: View {
                                         VStack(alignment: .leading, spacing: 0) {
                                             if let explanation = promptDetail?["explanation"] as? String {
                                                 Text(explanation)
-                                                    .font(.title).bold()
+                                                    .font(.system(size:16))
+                                                    .padding(4)
                                             }
-                                            Text(prompt.folder)
-                                                .padding(4)
                                             Spacer(minLength: 0)
                                         }
                                         .frame(maxWidth: .infinity, alignment: .leading)
