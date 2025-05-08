@@ -12,8 +12,8 @@ struct PromptDetailView: View {
     @State private var showDialog: Bool = false
     @State private var showTabs: Bool = true
     @State private var selectedTab: Int = 0
-    @State private var output : String = "1"
-    @State private var outputs: [String] = ["回答1の内容", "回答2の内容"]
+    @State private var output : Int = 1
+    @State private var outputs: [String] = ["回答1の内容", "回答2の内容", "回答3の内容", "回答4の内容", "回答5の内容"]
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
@@ -91,11 +91,11 @@ struct PromptDetailView: View {
                                     HStack(spacing: 16) {
                                         Spacer()
                                         Picker("同時出力回数", selection: $output) {
-                                            Text("1").tag("1")
-                                            Text("2").tag("2")
-                                            Text("3").tag("3")
-                                            Text("4").tag("4")
-                                            Text("5").tag("5")
+                                            Text("1").tag(1)
+                                            Text("2").tag(2)
+                                            Text("3").tag(3)
+                                            Text("4").tag(4)
+                                            Text("5").tag(5)
                                         }
                                         .pickerStyle(MenuPickerStyle())
                                         .frame(width: 200)
@@ -134,7 +134,7 @@ struct PromptDetailView: View {
                                                 .disabled(selectedTab == 0)
                                                 .buttonStyle(.bordered)
 
-                                                ForEach(0..<outputs.count, id: \.self) { idx in
+                                                ForEach(0..<output, id: \.self) { idx in
                                                     if selectedTab == idx {
                                                         Button("回答\(idx + 1)") {
                                                             selectedTab = idx
@@ -149,11 +149,11 @@ struct PromptDetailView: View {
                                                 }
 
                                                 Button("▶") {
-                                                    if selectedTab < outputs.count - 1 {
+                                                    if selectedTab < output - 1 {
                                                         selectedTab += 1
                                                     }
                                                 }
-                                                .disabled(selectedTab == outputs.count - 1)
+                                                .disabled(selectedTab == output - 1)
                                                 .buttonStyle(.bordered)
                                             }
                                         }
@@ -258,7 +258,7 @@ struct PromptDetailView: View {
                 }
             }
         }
-        .frame(width: 1024, height: 800)
+        .frame(width: 1080, height: 800)
     }
 }
 
