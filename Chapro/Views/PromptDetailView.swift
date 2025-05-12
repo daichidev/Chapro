@@ -4,10 +4,10 @@ struct PromptDetailView: View {
     let prompt: PromptItem
     @State private var promptDetail: [String: Any]? = nil
     @State private var variableText: String = ""
-    @State private var selectedDropdown: String = "選択肢1"
+    @State private var selectedDropdown: [String:String] = [:]
     @State private var isChecked1: Bool = false
-    @State private var isChecked2: Bool = false
-    @State private var isChecked3: Bool = false
+    @State private var checkboxSelected: [String: Set<String>] = [:]
+    @State private var textInputs: [String: String] = [:]
     @State private var resultText: String = ""
     @State private var showDialog: Bool = false
     @State private var showTabs: Bool = true
@@ -75,23 +75,65 @@ struct PromptDetailView: View {
                             ZStack(alignment: .topLeading) {
                                 VStack {
                                     VStack(alignment: .leading, spacing: 16) {
-                                        // テキストボックス（複数行）
-                                        Text("【自由入力】")
-                                        TextEditor(text: $variableText)
-                                            .frame(height: 60)
-                                            .border(Color.gray)
-                                        // プルダウン
-                                        Text("【プルダウン】")
-                                        Picker("選択", selection: $selectedDropdown) {
-                                            Text("選択肢1").tag("選択肢1")
-                                            Text("選択肢2").tag("選択肢2")
+                                        if let variables = promptDetail?["variables"] as? [[String: Any]] {
+                                           ForEach(0..<variables.count, id: \.self) { index in
+                                                let variable = variables[index]
+                                                let name = variable["name"] as? String ?? "No Name"
+                                                let type = variable["type"] as? String ?? ""
+                                                let fieldNo = String(variable["fieldNo"] as? Int ?? 0)
+                                                VStack(alignment: .leading) {
+                                                    Text("【\(name)】")
+                                                        .bold()
+
+                                                    switch type {
+                                                    case "free":
+                                                        TextEditor(text: Binding(
+                                                            get: { textInputs[fieldNo, default: ""] },
+                                                            set: { textInputs[fieldNo] = $0 }
+                                                        ))
+                                                        .frame(height: 60)
+                                                        .border(Color.gray)
+
+                                                    case "pulldown":
+                                                        if let selections = variable["selections"] as? [[String: Any]] {
+                                                            Picker("", selection: $selectedDropdown[fieldNo]) {
+                                                                ForEach(0..<selections.count, id: \.self) { index in
+                                                                    let name = selections[index]["name"] as? String ?? ""
+                                                                    Text(name).tag(name)
+                                                                }
+                                                            }
+                                                            .pickerStyle(MenuPickerStyle())
+                                                        }
+
+                                                    case "checkbox":
+                                                        if let selections = variable["selections"] as? [[String: Any]] {
+                                                            ForEach(0..<selections.count, id: \.self) { index in
+                                                                let name = selections[index]["name"] as? String ?? ""
+                                                                Toggle(name, isOn: Binding(
+                                                                    get: {
+                                                                        checkboxSelected[fieldNo]?.contains(name) ?? false
+                                                                    },
+                                                                    set: { newValue in
+                                                                        if checkboxSelected[fieldNo] == nil {
+                                                                            checkboxSelected[fieldNo] = []
+                                                                        }
+                                                                        if newValue {
+                                                                            checkboxSelected[fieldNo]?.insert(name)
+                                                                        } else {
+                                                                            checkboxSelected[fieldNo]?.remove(name)
+                                                                        }
+                                                                    }
+                                                                ))
+                                                            }
+                                                        }
+
+                                                    default:
+                                                        Text("未対応の変数タイプ: \(type)")
+                                                    }
+                                                }
+                                            }
                                         }
-                                        .pickerStyle(MenuPickerStyle())
-                                        // チェックボックス
-                                        Text("【チェックボックス】")
-                                        Toggle("チェックボックス選択肢1", isOn: $isChecked1)
-                                        Toggle("チェックボックス選択肢2", isOn: $isChecked2)
-                                        Toggle("チェックボックス選択肢3", isOn: $isChecked3)
+
                                     }
                                     
                                     Spacer()
@@ -108,6 +150,9 @@ struct PromptDetailView: View {
                                         .frame(width: 200)
                                         Button("プロンプト実行") {
                                             showDialog = true
+                                            print(selectedDropdown)
+                                            print(checkboxSelected)
+                                            print(textInputs)
                                         }
                                         .buttonStyle(BlueButtonStyle())
                                     }
