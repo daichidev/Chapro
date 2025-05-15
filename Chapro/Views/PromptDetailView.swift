@@ -12,11 +12,14 @@ struct PromptDetailView: View {
     @State private var showDialog: Bool = false
     @State private var showTabs: Bool = true
     @State private var selectedTab: Int = 0
+    @State private var execute_code: Int = 0
     @State private var outputCount : Int = 0
+    @State private var errorMessage : String = ""
     @State private var sendMessageCount : Int = 1
     @State private var outputs: [String] = []
     @Environment(\.dismiss) var dismiss
-    
+    @Environment(\.colorScheme) var colorScheme
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -92,31 +95,35 @@ struct PromptDetailView: View {
                                                     case "free":
                                                         let count = textNum[fieldNo] ?? 1
                                                         ForEach(0..<count, id: \.self) { idx in
-                                                            TextEditor(text: Binding(
-                                                                get: {
-                                                                    if let list = textInputs[fieldNo], list.indices.contains(idx) {
-                                                                        return list[idx]
-                                                                    } else {
-                                                                        return ""
-                                                                    }
-                                                                },
-                                                                set: { newValue in
-                                                                    if textInputs[fieldNo] == nil {
-                                                                        textInputs[fieldNo] = Array(repeating: "", count: count)
-                                                                    }
-                                                                    if var list = textInputs[fieldNo] {
-                                                                        if idx < list.count {
-                                                                            list[idx] = newValue
+                                                            VStack{
+                                                                TextEditor(text: Binding(
+                                                                    get: {
+                                                                        if let list = textInputs[fieldNo], list.indices.contains(idx) {
+                                                                            return list[idx]
                                                                         } else {
-                                                                            list.append(contentsOf: Array(repeating: "", count: idx - list.count + 1))
-                                                                            list[idx] = newValue
+                                                                            return ""
                                                                         }
-                                                                        textInputs[fieldNo] = list
+                                                                    },
+                                                                    set: { newValue in
+                                                                        if textInputs[fieldNo] == nil {
+                                                                            textInputs[fieldNo] = Array(repeating: "", count: count)
+                                                                        }
+                                                                        if var list = textInputs[fieldNo] {
+                                                                            if idx < list.count {
+                                                                                list[idx] = newValue
+                                                                            } else {
+                                                                                list.append(contentsOf: Array(repeating: "", count: idx - list.count + 1))
+                                                                                list[idx] = newValue
+                                                                            }
+                                                                            textInputs[fieldNo] = list
+                                                                        }
                                                                     }
-                                                                }
-                                                            ))
-                                                            .frame(height: 60)
-                                                            .border(Color.gray)
+                                                                ))
+                                                                .frame(height: 60)
+                                                                .border(Color.gray)
+                                                            }
+                                                            .padding(8)
+                                                            
                                                         }
                                                         
                                                         if chainType == "2" {
@@ -361,21 +368,20 @@ struct PromptDetailView: View {
                                             VStack(alignment: .leading, spacing: 0) {
                                                 if outputs.indices.contains(selectedTab) {
                                                     Text(outputs[selectedTab])
-                                                        .padding(4)
+                                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                                                 } else {
                                                     Text("")
                                                         .padding(4)
                                                 }
                                             }
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .foregroundColor(.gray)
+                                            .padding(4)
+                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                                             .font(.body)
                                             .cornerRadius(8)
-                                            .background(Color(NSColor.windowBackgroundColor))
                                         }
                                         .border(Color.gray.opacity(0.3))
                                         .frame(maxHeight: .infinity)
-                                        
+
                                         Spacer()
                                         
                                         HStack {
@@ -421,7 +427,6 @@ struct PromptDetailView: View {
                 
                 HStack {
                     Spacer()
-                    // ⑧ 閉じる
                     Button("閉じる") {
                         dismiss()
                     }
@@ -429,16 +434,36 @@ struct PromptDetailView: View {
                 }
             }
             .padding(8)
-            // ⑩ プロンプト実行ダイアログ
             .sheet(isPresented: $showDialog) {
                 VStack(spacing: 24) {
                     Text("プロンプト実行中...")
-                        .font(.headline)
+                        .font(.system(size: 14))
+                        if errorMessage != "" {
+                            Text(errorMessage)
+                            .font(.system(size: 15))
+                            .bold()
+                        }
+                            
                     ProgressView()
                         .progressViewStyle(LinearProgressViewStyle())
                         .frame(width: 200)
                     Button("キャンセル") {
-                        showDialog = false
+                        if execute_code == 0 {
+                            showDialog = false
+                        } else {
+                            APIClient.request(path: "chain-prompt-cancel/\(execute_code)", method: "PUT") { result in
+                                switch result {
+                                case .success(let data):
+                                    do {
+                                        showDialog = false
+                                    } catch {
+                                        print("Error parsing chain result: \(error.localizedDescription)")
+                                    }
+                                case .failure(let error):
+                                    print("Chain poll failed: \(error.localizedDescription)")
+                                }
+                            }
+                        }
                     }
                     .buttonStyle(GrayButtonStyle())
                 }
@@ -542,7 +567,8 @@ struct PromptDetailView: View {
             body["id"] = id
             body["variables"] = result
         }
-        
+        execute_code = 0
+        errorMessage = ""
         do {
             let bodyData = try JSONSerialization.data(withJSONObject: body, options: [])
             let path = isChain ? "chain-prompt-execute" : "prompt-execute"
@@ -558,18 +584,21 @@ struct PromptDetailView: View {
                             if let jsonDict = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
                                 if isChain, let executeCode = jsonDict["execute_code"] as? Int {
                                     DispatchQueue.main.async {
-                                        // poll for chain prompt result
+                                        self.execute_code = executeCode
                                         pollChainResult(executeCode: executeCode, responseNumber: number)
                                     }
                                 } else {
                                     DispatchQueue.main.async {
-                                        self.showDialog = false
                                         if let message = jsonDict["message"] as? String {
                                             if outputs.indices.contains(number) {
                                                 outputs[number] = message
                                             }
+                                            self.showDialog = false
                                         } else {
-                                            print("No 'message' in non-chain response")
+                                            print("No 'message' in non-chain response: \(jsonDict)")
+                                            DispatchQueue.main.async {
+                                                self.errorMessage = "非連鎖応答にはメッセージが含まれていません。"
+                                            }
                                         }
                                     }
                                 }
@@ -578,19 +607,22 @@ struct PromptDetailView: View {
                             }
                         } catch {
                             print("JSON parse error: \(error.localizedDescription)")
+                            DispatchQueue.main.async {
+                                self.errorMessage = error.localizedDescription
+                            }
                         }
                     case .failure(let error):
                         print("Initial request failed: \(error.localizedDescription)")
-                        DispatchQueue.main.async {
-                            self.showDialog = false
+                         DispatchQueue.main.async {
+                            self.errorMessage = error.localizedDescription
                         }
                     }
                 }
             }
         } catch {
             print("Error serializing body: \(error.localizedDescription)")
-            DispatchQueue.main.async {
-                self.showDialog = false
+             DispatchQueue.main.async {
+                self.errorMessage = error.localizedDescription
             }
         }
     }
@@ -607,21 +639,30 @@ struct PromptDetailView: View {
                             timer?.invalidate()
                             timer = nil
                             DispatchQueue.main.async {
-                                self.showDialog = false
-                                if let message = jsonArray["message"] as? String {
+                                if let message = jsonArray["text"] as? String {
                                     if self.outputs.indices.contains(responseNumber) {
                                         self.outputs[responseNumber] = message
                                     }
+                                    self.showDialog = false
                                 } else {
-                                    print("No 'message' in chain response")
+                                    print("No 'message' in chain response \(jsonArray)")
+                                    DispatchQueue.main.async {
+                                        self.errorMessage = "連鎖応答にはメッセージが含まれていません。"
+                                    }
                                 }
                             }
                         }
                     } catch {
                         print("Error parsing chain result: \(error.localizedDescription)")
+                        DispatchQueue.main.async {
+                            self.errorMessage = error.localizedDescription
+                        }
                     }
                 case .failure(let error):
                     print("Chain poll failed: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        self.errorMessage = error.localizedDescription
+                    }
                 }
             }
         }
