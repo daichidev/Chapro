@@ -8,111 +8,16 @@
 import SwiftUI
 import Foundation
 
+class ReloadManager: ObservableObject {
+    @Published var shouldReload = false
+}
+
 struct MainView: View {
-    let samplePrompts: [[String: Any]] = [
-        [
-            "id": 128095,
-            "type": "prompt",
-            "folder": "カテゴリー名",
-            "name": "通常プロンプトデスクトップテスト",
-            "created_at": "2025-02-21 16:07:58"
-        ],
-        [
-            "id": 128098,
-            "type": "chain-prompt",
-            "folder": "カテゴリー名",
-            "name": "チェーンプロンプトデスクトップテスト",
-            "created_at": "2025-02-21 16:08:29"
-        ],
-        [
-            "id": 143623,
-            "type": "prompt",
-            "folder": "小説作成",
-            "name": "小説_コピー",
-            "created_at": "2025-03-13 07:48:40"
-        ],
-        [
-            "id": 143624,
-            "type": "prompt",
-            "folder": "小説作成",
-            "name": "小説_コピー",
-            "created_at": "2025-03-13 07:48:40"
-        ],
-        [
-            "id": 143625,
-            "type": "prompt",
-            "folder": "小説作成",
-            "name": "小説複数カテゴリ_コピー",
-            "created_at": "2025-03-13 07:48:40"
-        ],
-        [
-            "id": 143626,
-            "type": "chain-prompt",
-            "folder": "小説作成",
-            "name": "小説作成_デスクトップチェーン",
-            "created_at": "2025-03-13 07:48:40"
-        ],
-        [
-            "id": 143627,
-            "type": "prompt",
-            "folder": "画像作成",
-            "name": "画像作成通常プロンプト_コピー",
-            "created_at": "2025-03-13 07:48:44"
-        ],
-        [
-            "id": 143628,
-            "type": "chain-prompt",
-            "folder": "画像作成",
-            "name": "画像作成チェーン_コピー",
-            "created_at": "2025-03-13 07:48:44"
-        ],
-        [
-            "id": 147678,
-            "type": "chain-prompt",
-            "folder": "合体変数チェーンプロンプト",
-            "name": "合体テスト２",
-            "created_at": "2025-03-18 07:57:26"
-        ],
-        [
-            "id": 147679,
-            "type": "chain-prompt",
-            "folder": "合体変数チェーンプロンプト",
-            "name": "合体テスト１",
-            "created_at": "2025-03-18 07:57:26"
-        ]
-    ]
-    @State private var notification: String = """
-【新機能「共有フォルダ機能」追加のお知らせ】
-ご利用者の皆様
-
-いつもクラウドメモ帳サービス「Notes Hub」をご利用いただき、誠にありがとうございます。
-株式会社ドキュメントソリューションズです。
-
-この度、Notes Hubに新機能「共有フォルダ機能」が追加されましたことをお知らせいたします。
-
-▼ 追加された機能
-共有フォルダ機能：フォルダ単位で他のユーザーとメモを共有できるようになりました。
-
-この機能により、チームでの情報共有や共同編集がよりスムーズになります。
-
-新機能は、ログイン後、フォルダ一覧画面の右上の「新規作成」メニューから「共有フォルダを作成」を選択することでご利用いただけます。
-
-詳しい使い方は、以下のヘルプページをご覧ください。
-https://notes-hub.example.com/help/shared-folder
-
-ぜひこの機会に新機能をお試しいただき、Notes Hubをより便利にご活用ください。
-
-今後ともNotes Hubをよろしくお願いいたします。
-
---------------------------------------------------
-株式会社ドキュメントソリューションズ
-クラウドメモ帳サービス「Notes Hub」運営チーム
-
-サービスサイト： https://notes-hub.example.com
-お問い合わせフォーム： https://notes-hub.example.com/support
-メール： support@notes-hub.example.com
---------------------------------------------------
-"""
+    @State private var notification: String = ""
+    @State private var serverHost: String = ""
+    @StateObject var reloadManager = ReloadManager()
+    @State private var checkCount: Int = 0
+    @State private var checkValue: Int = 0
     @State private var showSettings = false
     @State private var path: [String] = []
     @State private var promptList: [[String: Any]] = []
@@ -135,10 +40,13 @@ https://notes-hub.example.com/help/shared-folder
                        MainButton(title: "プロンプト一覧") {
                             path.append("promptList")
                         }
+                       .disabled(promptList.isEmpty)
                         
                         MainButton(title: "AIチャット") {
                             path.append("chatView")
                         }
+                       .disabled(promptList.isEmpty)
+                        // .disabled(serverHost.isEmpty)
                     }
                     .padding(.top)
                     
@@ -186,11 +94,11 @@ https://notes-hub.example.com/help/shared-folder
                 
                 switch value {
                 case "promptList":
-                    PromptListView(promptList: samplePrompts)
+                    PromptListView(promptList: self.promptList)
                 case "chatView":
-                    ChatView()
+                    ChatView(serverHost: self.serverHost, checkCount: self.checkCount, checkValue: self.checkValue)
                 case "settings":
-                    SettingsView()
+                    SettingsView(reloadManager: reloadManager)
                 default:
                     EmptyView()
                 }
@@ -199,11 +107,99 @@ https://notes-hub.example.com/help/shared-folder
                 if let code = DatabaseManager.shared.getSetting(key: "chapro") {
                     showSettings = code.count == 0 ? true : false
                 }
+                if showSettings == false {
+                    fetchAPI()
+                }
             }
             .navigationTitle("チャプロ")
-            // .sheet(isPresented: $showSettings) {
-            //     SettingsView()
-            // }
+            
+            .sheet(isPresented: $showSettings) {
+                SettingsView(reloadManager: reloadManager)
+            }
+        }
+        .onChange(of: reloadManager.shouldReload) { newValue in
+            if newValue {
+                reloadData()
+                reloadManager.shouldReload = false
+            }
+        }
+    }
+    func reloadData() {
+        if let code = DatabaseManager.shared.getSetting(key: "chapro") {
+            if code.count == 0 {
+                NSApplication.shared.terminate(nil)
+            }
+            showSettings = code.count == 0 ? true : false
+        }
+        fetchAPI()
+    }
+    func fetchAPI(){
+        if showSettings == false {
+            APIClient.request(path: "info"){ result in
+                switch result {
+                case .success(let data):
+                    do{
+                        if let json = try JSONSerialization.jsonObject(with: data, options:[]) as? [String: Any],
+                            let information = json["information"] as? [[String:Any]] {
+                            let title = information[0]["title"] as? String ?? ""
+                            let content = information[0]["content"] as? String ?? ""
+                            let formattedNotification = """
+                                                                
+                            【\(title)】
+                            \(content)                                    
+                            
+                            """
+                            DispatchQueue.main.async {
+                                self.notification = formattedNotification
+                            }
+                            if let serverHost = json["security_check_server_host"] as? String {
+                            
+                            DispatchQueue.main.async {
+                                self.serverHost = serverHost
+                            }
+                            }
+                            if let checkCount = json["security_check_count"] as? Int {
+                                
+                                DispatchQueue.main.async {
+                                    self.checkCount = checkCount
+                                }
+                            }
+                            if let checkValue = json["security_check_value"] as? Int {
+                                
+                                DispatchQueue.main.async {
+                                    self.checkValue = checkValue
+                                }
+                            }
+                        }
+                    } catch {
+                        print("JSON parsing error: \(error.localizedDescription)")
+                    }
+                    
+                case .failure(let error):
+                    self.notification = error.localizedDescription
+                }
+            }
+            APIClient.request(path: "prompt-list") { result in
+                switch result {
+                case .success(let data):
+                    do {
+                        if let jsonArray = try JSONSerialization.jsonObject(with: data, options: []) as? [[String: Any]] {
+                            DispatchQueue.main.async {
+                                self.promptList = jsonArray
+                            }
+                        } else {
+                            print("Unexpected JSON structure")
+                        }
+                    } catch {
+                        self.notification = error.localizedDescription
+                        self.promptList = []
+                    }
+
+                case .failure(let error):
+                    self.notification = error.localizedDescription
+                    self.promptList = []
+                }
+            }
         }
     }
 }
