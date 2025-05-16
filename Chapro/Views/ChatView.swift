@@ -282,6 +282,7 @@ struct ChatView: View {
     @State private var aiAnswers: [[ChatMessage]] = []
     @State private var selectedAnswerIndex: Int = 0
     @State private var showModal: Bool = false
+    @State private var errorMessage : String = ""
     @State private var currentAnswers: [String] = []
     @State private var messageAnswerCounts: [Int: Int] = [:]
     @Environment(\.dismiss) var dismiss
@@ -370,57 +371,87 @@ struct ChatView: View {
 
     private func sendMessage() {
         guard !inputText.isEmpty else { return }
-        showDialog = true // Show dialog when send is pressed
+        showDialog = true
+        errorMessage = ""
+        do {
+            if let thread = selectedThread {
+                let questionId = DatabaseManager.shared.getNextMessageId(threadId: thread.id)
+                let userMessage = ChatMessage(
+                    id: questionId,
+                    threadId: thread.id,
+                    seq: 1,
+                    type: "user",
+                    message: inputText,
+                    createAt: Date()
+                )
+                
+                if DatabaseManager.shared.addChatMessage(
+                    threadId: thread.id,
+                    id: questionId,
+                    seq: 1,
+                    type: "user",
+                    message: inputText,
+                    createAt: Date()
+                ) {
+                    messages.append(userMessage)
+                    
+                    for i in 0..<simultaneousOutputCount {
+                        let answerId = DatabaseManager.shared.getNextMessageId(threadId: thread.id)
+                        let bodyData = try JSONSerialization.data(withJSONObject: ["message": inputText], options: [])
+                        APIClient.request(path: "ai-chat", method:"POST", body: bodyData, timeout:30) { result in
+                            switch result {
+                            case .success(let data):
+                                do {
+                                    if let jsonArray = try JSONSerialization.jsonObject(with: data, options: []) as? [String: String] {
+                                        if let message = jsonArray["message"] as? String {
+                                            let aiMessage = ChatMessage(
+                                                id: answerId,
+                                                threadId: thread.id,
+                                                seq: i + 1,
+                                                type: "ai",
+                                                message: message,
+                                                createAt: Date()
+                                            )
+                                            
+                                            if DatabaseManager.shared.addChatMessage(
+                                                threadId: thread.id,
+                                                id: answerId,
+                                                seq: i + 1,
+                                                type: "ai",
+                                                message: message,
+                                                createAt: Date()
+                                            ) {
+                                                messages.append(aiMessage)
+                                            }
+                                            if i == simultaneousOutputCount - 1 {
+                    
+                                                showDialog = false
+                                            }
+                                        }
+                                    } else {
+                                        print("Unexpected JSON structure")
+                                    }
+                                } catch {
+                                    print(error.localizedDescription)
+                                    DispatchQueue.main.async {
+                                        self.errorMessage = error.localizedDescription
+                                    }
+                                }
 
-        if let thread = selectedThread {
-            let questionId = DatabaseManager.shared.getNextMessageId(threadId: thread.id)
-            let userMessage = ChatMessage(
-                id: questionId,
-                threadId: thread.id,
-                seq: 1,
-                type: "user",
-                message: inputText,
-                createAt: Date()
-            )
-            
-            if DatabaseManager.shared.addChatMessage(
-                threadId: thread.id,
-                id: questionId,
-                seq: 1,
-                type: "user",
-                message: inputText,
-                createAt: Date()
-            ) {
-                messages.append(userMessage)
-                
-                for i in 0..<simultaneousOutputCount {
-                    let answerId = DatabaseManager.shared.getNextMessageId(threadId: thread.id)
-                    let answer = generateRandomAnswer(for: inputText, index: i)
-                    
-                    let aiMessage = ChatMessage(
-                        id: answerId,
-                        threadId: thread.id,
-                        seq: i + 1,
-                        type: "ai",
-                        message: answer,
-                        createAt: Date()
-                    )
-                    
-                    if DatabaseManager.shared.addChatMessage(
-                        threadId: thread.id,
-                        id: answerId,
-                        seq: i + 1,
-                        type: "ai",
-                        message: answer,
-                        createAt: Date()
-                    ) {
-                        messages.append(aiMessage)
+                            case .failure(let error):
+                                print(error.localizedDescription)
+                                DispatchQueue.main.async {
+                                    self.errorMessage = error.localizedDescription
+                                }
+                            }
+                        }
                     }
+                    inputText = ""
+                    selectedAnswerIndex = 0
                 }
-                
-                inputText = ""
-                selectedAnswerIndex = 0
             }
+        } catch {
+             print("Error serializing body: \(error.localizedDescription)")
         }
     }
 
@@ -497,8 +528,13 @@ struct ChatView: View {
         .navigationTitle("AIチャット")
         .sheet(isPresented: $showDialog) {
             VStack(spacing: 24) {
-                Text("プロンプト実行中...")
-                    .font(.headline)
+                 Text("プロンプト実行中...")
+                    .font(.system(size: 14))
+                    if errorMessage != "" {
+                        Text(errorMessage)
+                        .font(.system(size: 15))
+                        .bold()
+                    }
                 ProgressView()
                     .progressViewStyle(LinearProgressViewStyle())
                     .frame(width: 200)

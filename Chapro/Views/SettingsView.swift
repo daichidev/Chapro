@@ -3,7 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @State private var integrationCode: String = ""
-    
+    @ObservedObject var reloadManager: ReloadManager
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -78,11 +79,9 @@ struct SettingsView: View {
     
     private func saveSettings() {
         DatabaseManager.shared.addSetting(key: "chapro", value: integrationCode)
+        reloadManager.shouldReload = true
         dismiss()
     }
 }
 
 
-#Preview {
-    SettingsView()
-}
