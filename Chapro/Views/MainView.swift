@@ -45,6 +45,7 @@ struct MainView: View {
                         MainButton(title: "AIチャット") {
                             path.append("chatView")
                         }
+                       .disabled(promptList.isEmpty)
                         // .disabled(serverHost.isEmpty)
                     }
                     .padding(.top)
@@ -95,7 +96,7 @@ struct MainView: View {
                 case "promptList":
                     PromptListView(promptList: self.promptList)
                 case "chatView":
-                    ChatView()
+                    ChatView(serverHost: self.serverHost, checkCount: self.checkCount, checkValue: self.checkValue)
                 case "settings":
                     SettingsView(reloadManager: reloadManager)
                 default:
@@ -191,10 +192,12 @@ struct MainView: View {
                         }
                     } catch {
                         self.notification = error.localizedDescription
+                        self.promptList = []
                     }
 
                 case .failure(let error):
                     self.notification = error.localizedDescription
+                    self.promptList = []
                 }
             }
         }
